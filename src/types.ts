@@ -177,6 +177,8 @@ export type Settings = {
   nationalLibrary: boolean;
   lubimyCzytac: boolean;
   upolujebooka: boolean;
+  empik: boolean;
+  appleBooks: boolean;
   googleBooksHasKey: boolean;
   locale: string;
   autoBackup: boolean;

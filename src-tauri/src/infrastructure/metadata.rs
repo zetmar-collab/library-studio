@@ -697,13 +697,15 @@ pub fn search_covers(settings: &Settings, api_key: Option<&str>, query: &Metadat
             }
         }
     }
-    // Okładki z Empiku i Apple Books — dodatkowe źródła z programu Czytnik.
-    if !phrase.is_empty() {
+    // Okładki z Empiku i Apple Books — dodatkowe źródła z programu Czytnik, każde z własnym przełącznikiem.
+    if settings.empik && !phrase.is_empty() {
         if let Ok(found) = empik_covers(&phrase) {
             for (url, found_title) in found {
                 push_raw_cover(&mut covers, "Empik", url, found_title, Vec::new());
             }
         }
+    }
+    if settings.apple_books && !phrase.is_empty() {
         if let Ok(found) = apple_covers(&phrase) {
             for (url, found_title, authors) in found {
                 push_raw_cover(&mut covers, "Apple Books", url, found_title, authors);

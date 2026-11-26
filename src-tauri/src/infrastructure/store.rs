@@ -28,6 +28,8 @@ pub fn get_settings(conn: &Connection) -> Result<Settings, String> {
         national_library: flag(conn, "national_library", true)?,
         lubimy_czytac: flag(conn, "lubimy_czytac", true)?,
         upolujebooka: flag(conn, "upolujebooka", true)?,
+        empik: flag(conn, "empik", true)?,
+        apple_books: flag(conn, "apple_books", true)?,
         google_books_has_key: false,
         locale: setting(conn, "locale")?.unwrap_or_else(|| "pl".into()),
         auto_backup: flag(conn, "auto_backup", false)?,
@@ -68,6 +70,12 @@ pub fn save_settings(conn: &Connection, patch: SettingsPatch) -> Result<(), Stri
     }
     if let Some(value) = patch.upolujebooka {
         put_setting(conn, "upolujebooka", if value { "1" } else { "0" })?;
+    }
+    if let Some(value) = patch.empik {
+        put_setting(conn, "empik", if value { "1" } else { "0" })?;
+    }
+    if let Some(value) = patch.apple_books {
+        put_setting(conn, "apple_books", if value { "1" } else { "0" })?;
     }
     if let Some(locale) = patch.locale {
         if locale == "pl" || locale == "en" {
@@ -1738,7 +1746,7 @@ mod tests {
         fs::create_dir_all(&library).unwrap();
         db.with(|conn| {
             save_settings(conn, SettingsPatch {
-                library_dir: Some(library.display().to_string()), theme: None, open_library: None, google_books: None, national_library: None, lubimy_czytac: None, upolujebooka: None,
+                library_dir: Some(library.display().to_string()), theme: None, open_library: None, google_books: None, national_library: None, lubimy_czytac: None, upolujebooka: None, empik: None, apple_books: None,
                 locale: None, auto_backup: None, backup_dir: None, sync_provider: None, sync_dir: None, webdav_url: None, webdav_user: None, reading_goal: None,
             })?;
             let paths = StorePaths { library: Some(library.clone()), covers: dir.0.clone() };

@@ -336,6 +336,8 @@ pub struct Settings {
     pub national_library: bool,
     pub lubimy_czytac: bool,
     pub upolujebooka: bool,
+    pub empik: bool,
+    pub apple_books: bool,
     pub google_books_has_key: bool,
     pub locale: String,
     pub auto_backup: bool,
@@ -360,6 +362,10 @@ pub struct SettingsPatch {
     pub lubimy_czytac: Option<bool>,
     #[serde(default)]
     pub upolujebooka: Option<bool>,
+    #[serde(default)]
+    pub empik: Option<bool>,
+    #[serde(default)]
+    pub apple_books: Option<bool>,
     pub locale: Option<String>,
     pub auto_backup: Option<bool>,
     pub backup_dir: Option<String>,

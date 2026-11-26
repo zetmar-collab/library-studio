@@ -763,7 +763,7 @@ mod tests {
         db.with(|conn| {
             store::save_settings(conn, SettingsPatch {
                 library_dir: Some(library.to_string_lossy().to_string()),
-                theme: None, open_library: None, google_books: None, national_library: None, lubimy_czytac: None, upolujebooka: None, locale: None,
+                theme: None, open_library: None, google_books: None, national_library: None, lubimy_czytac: None, upolujebooka: None, empik: None, apple_books: None, locale: None,
                 auto_backup: None, backup_dir: None, sync_provider: None, sync_dir: None, webdav_url: None, webdav_user: None, reading_goal: None,
             })?;
             let paths = StorePaths { library: Some(library.clone()), covers: root.join("covers") };
@@ -799,7 +799,7 @@ mod tests {
         db.with(|conn| {
             store::save_settings(conn, SettingsPatch {
                 library_dir: Some(library.to_string_lossy().to_string()),
-                theme: None, open_library: None, google_books: None, national_library: None, lubimy_czytac: None, upolujebooka: None, locale: None,
+                theme: None, open_library: None, google_books: None, national_library: None, lubimy_czytac: None, upolujebooka: None, empik: None, apple_books: None, locale: None,
                 auto_backup: None, backup_dir: None, sync_provider: None, sync_dir: None, webdav_url: None, webdav_user: None, reading_goal: None,
             })?;
             let paths = StorePaths { library: Some(library), covers: root.join("covers") };

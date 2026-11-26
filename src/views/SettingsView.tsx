@@ -71,6 +71,12 @@ export function SettingsView({ theme, onTheme, onLocale, onChanged }: { theme: "
         <Row title={t("upoluj")} text={t("upolujHint")}>
           <input type="checkbox" checked={settings.upolujebooka} onChange={(event) => void save({ upolujebooka: event.target.checked })} />
         </Row>
+        <Row title="Empik" text={t("empikHint")}>
+          <input type="checkbox" checked={settings.empik} onChange={(event) => void save({ empik: event.target.checked })} />
+        </Row>
+        <Row title="Apple Books" text={t("appleHint")}>
+          <input type="checkbox" checked={settings.appleBooks} onChange={(event) => void save({ appleBooks: event.target.checked })} />
+        </Row>
         <form className="flex flex-wrap items-center justify-between gap-4 border-b border-rule py-4 dark:border-night-rule" onSubmit={(event) => { event.preventDefault(); void save({ readingGoal: goal.trim() ? Number(goal) : 0 }); }}>
           <div>
             <h2 className="text-base">{t("readingGoal")}</h2>
