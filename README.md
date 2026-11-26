@@ -2,6 +2,10 @@
 
 Prywatny katalog książek papierowych i elektronicznych. Baza, pliki i klucze zostają na tym komputerze.
 
+## Pobierz
+
+Instalator dla Windows 10 i 11: [najnowsze wydanie](https://github.com/zetmar-collab/library-studio/releases/latest) → `Library-Studio-Setup-<wersja>.exe`.
+
 ## Uruchomienie
 
 Wymagane: Node.js, Rust (stable) i Visual Studio Build Tools z pakietem C++. WebView2 jest w Windows 11.
