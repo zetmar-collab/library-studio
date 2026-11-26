@@ -1,0 +1,9 @@
+node_modules/
+dist/
+installer/output/
+src-tauri/target/
+.DS_Store
+*.log
+.env
+.env.*
+.kopia-przed-audytem-2026-11-25/

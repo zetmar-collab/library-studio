@@ -1,0 +1,58 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+@theme {
+  --font-display: "Newsreader", "Palatino Linotype", Palatino, Georgia, serif;
+  --font-sans: "Sora", "Segoe UI", sans-serif;
+  --color-ink: #17211c;
+  --color-paper: #e4ece7;
+  --color-sheet: #f5f8f6;
+  --color-binding: #1b3f32;
+  --color-binding-deep: #132c23;
+  --color-stamp: #8d2e2b;
+  --color-rule: #c5d2ca;
+  --color-moss: #3e6b54;
+  --color-muted: #5c6d64;
+  --color-night: #101714;
+  --color-night-sheet: #1a2620;
+  --color-night-ink: #e7eee9;
+  --color-night-muted: #a8b8af;
+  --color-night-rule: #2c3d34;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+html[data-theme="dark"] body {
+  background: var(--color-night);
+  color: var(--color-night-ink);
+}
+
+button,
+input {
+  font: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-stamp);
+  outline-offset: 3px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}

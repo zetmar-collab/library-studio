@@ -1,0 +1,492 @@
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
+
+import { enMore, exactMore, plMore, translateMore } from "./i18n-more";
+
+export type Locale = "pl" | "en";
+
+const pl = {
+  ...plMore,
+  appTagline: "Papier i pliki jako jedna kolekcja.",
+  navLibrary: "Katalog",
+  navShelves: "Półki",
+  navFiles: "Pliki",
+  navReader: "Czytnik",
+  navBackup: "Kopie",
+  navSettings: "Ustawienia",
+  addBook: "Dodaj książkę",
+  fillLibrary: "Uzupełnij metadane i okładki",
+  fillBook: "Szukaj metadanych i okładki",
+  fillWorking: "Szukam w Open Library i Google Books…",
+  fillDone: "Uzupełnione książki",
+  fillNone: "Nie znalazłem pewnego dopasowania po tytule i autorze.",
+  fillHint: "Okładka i puste pola biorą się z LubimyCzytać, UpolujEbooka, Biblioteki Narodowej, Open Library i Google Books.",
+  sendToReader: "Wyślij na czytnik",
+  sendThisBook: "Wyślij tę książkę na czytnik",
+  readerTitle: "Czytnik",
+  readerLead: "Podłącz Kindle, Kobo, PocketBook, Tolino albo Onyx Boox kablem USB. Program sam znajdzie dysk czytnika.",
+  readerRefresh: "Szukaj czytnika",
+  readerNone: "Nie widzę czytnika. Podłącz go kablem i wybierz tryb dysku USB, nie MTP.",
+  readerPick: "Wskaż folder czytnika",
+  readerOnDevice: "Na czytniku",
+  readerSend: "Wyślij zaznaczone",
+  readerImport: "Dodaj zaznaczone do katalogu",
+  readerWorking: "Przesyłam…",
+  readerCopied: "Skopiowane pliki",
+  readerAdded: "Dodane do katalogu",
+  readerSkipped: "Pominięte, bo już były",
+  readerNoFile: "brak pliku e-booka w katalogu",
+  readerBadFormat: "ten czytnik nie przyjmuje tego formatu. Obsługiwane:",
+  readerEmptyDevice: "Na czytniku nie ma plików e-booków.",
+  readerFormats: "Przyjmowane formaty",
+  readerAlready: "już w katalogu",
+  readerSelectBooks: "Zaznacz książki w katalogu albo wyślij jedną z jej strony.",
+  previewOnly: "Podgląd w przeglądarce nie otwiera bazy. Uruchom okno Library Studio.",
+  chooseLibrary: "Wybierz folder, w którym Library Studio ma trzymać okładki i pliki.",
+  chooseFolder: "Wybierz folder",
+  catalog: "Katalog",
+  searchPlaceholder: "Tytuł, autor, ISBN, tag, plik",
+  filterAll: "Wszystkie",
+  filterPaper: "Papierowe",
+  filterEbook: "E-booki",
+  filterLoaned: "Pożyczone",
+  filterFinished: "Przeczytane",
+  sortTitle: "Tytuł",
+  sortAuthor: "Autor",
+  sortCreated: "Data dodania",
+  sortRating: "Ocena",
+  sortPublished: "Rok wydania",
+  anyShelf: "Każda półka",
+  emptyCatalog: "Nic tu nie leży.",
+  emptyCatalogHint: "Dodaj książkę ISBN-em, skanem albo ręcznie. Katalog zostaje na tym komputerze.",
+  loanedTo: "pożyczone",
+  addTitle: "Dodaj książkę",
+  addLead: "Najpierw ISBN albo tytuł. Potem sprawdzasz dane i zapisujesz jedną pozycję.",
+  cancel: "Anuluj",
+  modeTitle: "Tytuł",
+  modeScan: "Skan",
+  modeManual: "Ręcznie",
+  isbnPlaceholder: "ISBN-10 albo ISBN-13",
+  search: "Szukaj",
+  author: "Autor",
+  noHits: "Brak wyników. Możesz wpisać książkę ręcznie.",
+  authorsLines: "Autorzy, każdy w osobnej linii",
+  publisher: "Wydawca",
+  year: "Rok",
+  description: "Opis",
+  saving: "Zapisuję…",
+  saveBook: "Zapisz książkę",
+  backToCatalog: "Wróć do katalogu",
+  isbnMissing: "brak",
+  sourceManual: "ręczne",
+  sourcePrefix: "źródło",
+  tagsLines: "Tagi, każdy w osobnej linii",
+  saveDetails: "Zapisz dane",
+  physicalCopy: "Egzemplarz papierowy",
+  noShelf: "Bez półki",
+  loanedPerson: "Pożyczone osobie",
+  saveCopy: "Zapisz egzemplarz",
+  files: "Pliki",
+  open: "Otwórz",
+  addFile: "Dodaj plik",
+  reading: "Czytanie",
+  ratingPlaceholder: "Ocena 1–5",
+  notes: "Notatki",
+  saveNote: "Zapisz notatkę",
+  markFinished: "Oznacz jako przeczytane",
+  deleteFromCatalog: "Usuń z katalogu",
+  loadingBook: "Wczytuję książkę.",
+  saved: "Zapisano.",
+  shelves: "Półki",
+  newShelf: "Nowa półka",
+  withFilter: "z filtrem",
+  unread: "Nieprzeczytane",
+  create: "Utwórz",
+  deleteShelf: "Usuń półkę",
+  verifyLibrary: "Zweryfikuj bibliotekę",
+  noFiles: "Nie ma jeszcze plików. Dodasz je przy książce.",
+  filePresent: "na miejscu",
+  fileMissing: "brak pliku",
+  fileChanged: "plik się zmienił",
+  fileDuplicate: "duplikat",
+  backupTitle: "Kopie i synchronizacja",
+  backupLead: "Kopia zostaje w katalogu wybranym w ustawieniach. Nic nie wychodzi z komputera, dopóki sam nie wskażesz folderu albo WebDAV.",
+  backupDatabase: "Kopia bazy",
+  backupFiles: "Kopia plików",
+  backupFull: "Pełna kopia",
+  sync: "Synchronizuj",
+  cancelJob: "Anuluj",
+  history: "Historia",
+  restoreCopy: "Przywróć tę kopię",
+  restored: "Przywrócono bazę. Otwórz katalog ponownie.",
+  conflicts: "Konflikty",
+  keepLocal: "Zostaw lokalne",
+  takeRemote: "Weź zdalne",
+  noConflicts: "Brak konfliktów.",
+  backupSaved: "Kopia zapisana.",
+  settings: "Ustawienia",
+  libraryFolder: "Katalog biblioteki",
+  notChosenYet: "Jeszcze nie wybrany",
+  choose: "Wybierz",
+  theme: "Motyw",
+  themeHint: "Jasny albo ciemny, na tym komputerze.",
+  light: "Jasny",
+  dark: "Ciemny",
+  language: "Język",
+  languageHint: "Polski albo angielski. Wybór zostaje na tym komputerze.",
+  polish: "Polski",
+  english: "English",
+  openLibrary: "Open Library",
+  openLibraryHint: "Oficjalne API i okładki, tylko gdy szukasz książki.",
+  nationalLibrary: "Biblioteka Narodowa",
+  nationalLibraryHint: "Największy polski katalog bibliograficzny. Dane są publiczne, na licencji CC0.",
+  googleBooks: "Google Books",
+  googleKeySaved: "Klucz jest zapisany w magazynie systemu.",
+  googleKeyMissing: "Bez własnego klucza to źródło jest wyłączone.",
+  googleKey: "Klucz Google Books",
+  saveKey: "Zapisz klucz",
+  keySaved: "Klucz zapisany.",
+  lubimy: "LubimyCzytać",
+  lubimyHint: "Opis, okładka, seria, wydawca i ocena czytelników. Program pyta tylko o książkę, którą właśnie uzupełniasz, tak jak wtyczka Calibre.",
+  upoluj: "UpolujEbooka",
+  upolujHint: "Opis, okładka, wydawca i ISBN e-booków. Program pyta tylko o książkę, którą właśnie uzupełniasz.",
+  unavailable: "niedostępne",
+  dailyBackup: "Codzienna kopia",
+  dailyBackupHint: "Gdy aplikacja jest otwarta, baza kopiuje się raz na dobę.",
+  backupFolder: "Katalog kopii",
+  notChosen: "Nie wybrany",
+  syncTitle: "Synchronizacja",
+  syncHint: "Folder lokalny albo WebDAV.",
+  folder: "Folder",
+  syncFolder: "Folder synchronizacji",
+  webdavUrl: "Adres WebDAV",
+  webdavUser: "Użytkownik",
+  saveWebdav: "Zapisz WebDAV",
+  webdavPassword: "Hasło WebDAV",
+  savePassword: "Zapisz hasło",
+  passwordChanged: "Hasło zmienione.",
+  passwordSaved: "Hasło zapisane.",
+  export: "Eksportuj",
+  import: "Importuj",
+  exported: "Wyeksportowano bibliotekę.",
+  shortcuts: "Skróty: Ctrl+F szukaj, Ctrl+N nowa książka, Escape wraca do katalogu.",
+  privacy: "Dane katalogu, pliki i klucze zostają na tym komputerze. Klucze trzyma magazyn systemu, nie baza SQLite. Aplikacja nie wysyła statystyk.",
+  loadingSettings: "Wczytuję ustawienia.",
+  searchCover: "Szukaj okładki",
+  searchingCover: "Szukam okładki…",
+  noCover: "Nie znalazłem okładki w Open Library ani w Google Books.",
+  coverUrl: "Adres https obrazu okładki",
+  useCover: "Użyj",
+  sourceGoogle: "Google Books",
+  sourceBn: "Biblioteka Narodowa",
+  sourceOpenLibrary: "Open Library",
+  shelfToRead: "Do przeczytania",
+  shelfLoaned: "Pożyczone",
+  shelfEbooks: "E-booki",
+  shelfUnread: "Nieprzeczytane",
+  failed: "Nie udało się wykonać tej czynności.",
+};
+
+const en: typeof pl = {
+  ...enMore,
+  appTagline: "Paper and files as one collection.",
+  navLibrary: "Catalog",
+  navShelves: "Shelves",
+  navFiles: "Files",
+  navReader: "Reader",
+  navBackup: "Backups",
+  navSettings: "Settings",
+  addBook: "Add a book",
+  fillLibrary: "Fill metadata and covers",
+  fillBook: "Look up metadata and cover",
+  fillWorking: "Searching Open Library and Google Books…",
+  fillDone: "Books updated",
+  fillNone: "No confident match by title and author.",
+  fillHint: "Covers and empty fields come from LubimyCzytać, UpolujEbooka, the National Library, Open Library and Google Books.",
+  sendToReader: "Send to reader",
+  sendThisBook: "Send this book to the reader",
+  readerTitle: "Reader",
+  readerLead: "Plug in a Kindle, Kobo, PocketBook, Tolino, or Onyx Boox with a USB cable. The app looks for the reader drive.",
+  readerRefresh: "Look for a reader",
+  readerNone: "No reader found. Connect it with a cable and choose USB drive mode, not MTP.",
+  readerPick: "Choose the reader folder",
+  readerOnDevice: "On the reader",
+  readerSend: "Send selected",
+  readerImport: "Add selected to the catalog",
+  readerWorking: "Copying…",
+  readerCopied: "Files copied",
+  readerAdded: "Added to the catalog",
+  readerSkipped: "Skipped because they were already there",
+  readerNoFile: "no ebook file in the catalog",
+  readerBadFormat: "this reader does not accept that format. Accepted:",
+  readerEmptyDevice: "There are no ebook files on the reader.",
+  readerFormats: "Accepted formats",
+  readerAlready: "already in the catalog",
+  readerSelectBooks: "Select books in the catalog, or send one from its page.",
+  previewOnly: "The browser preview does not open the database. Open the Library Studio window.",
+  chooseLibrary: "Choose the folder where Library Studio should keep covers and files.",
+  chooseFolder: "Choose folder",
+  catalog: "Catalog",
+  searchPlaceholder: "Title, author, ISBN, tag, file",
+  filterAll: "All",
+  filterPaper: "Paper",
+  filterEbook: "E-books",
+  filterLoaned: "Loaned",
+  filterFinished: "Finished",
+  sortTitle: "Title",
+  sortAuthor: "Author",
+  sortCreated: "Date added",
+  sortRating: "Rating",
+  sortPublished: "Publication year",
+  anyShelf: "Any shelf",
+  emptyCatalog: "Nothing here yet.",
+  emptyCatalogHint: "Add a book by ISBN, barcode, or by hand. The catalog stays on this computer.",
+  loanedTo: "loaned to",
+  addTitle: "Add a book",
+  addLead: "Start with an ISBN or a title. Then check the details and save one record.",
+  cancel: "Cancel",
+  modeTitle: "Title",
+  modeScan: "Scan",
+  modeManual: "Manual",
+  isbnPlaceholder: "ISBN-10 or ISBN-13",
+  search: "Search",
+  author: "Author",
+  noHits: "No results. You can enter the book by hand.",
+  authorsLines: "Authors, one per line",
+  publisher: "Publisher",
+  year: "Year",
+  description: "Description",
+  saving: "Saving…",
+  saveBook: "Save book",
+  backToCatalog: "Back to the catalog",
+  isbnMissing: "none",
+  sourceManual: "manual",
+  sourcePrefix: "source",
+  tagsLines: "Tags, one per line",
+  saveDetails: "Save details",
+  physicalCopy: "Physical copy",
+  noShelf: "No shelf",
+  loanedPerson: "Loaned to",
+  saveCopy: "Save copy",
+  files: "Files",
+  open: "Open",
+  addFile: "Add file",
+  reading: "Reading",
+  ratingPlaceholder: "Rating 1–5",
+  notes: "Notes",
+  saveNote: "Save note",
+  markFinished: "Mark as finished",
+  deleteFromCatalog: "Remove from catalog",
+  loadingBook: "Loading the book.",
+  saved: "Saved.",
+  shelves: "Shelves",
+  newShelf: "New shelf",
+  withFilter: "with a filter",
+  unread: "Unread",
+  create: "Create",
+  deleteShelf: "Delete shelf",
+  verifyLibrary: "Verify library",
+  noFiles: "No files yet. Add them from a book.",
+  filePresent: "present",
+  fileMissing: "file missing",
+  fileChanged: "file changed",
+  fileDuplicate: "duplicate",
+  backupTitle: "Backups and sync",
+  backupLead: "The backup stays in the folder you choose in settings. Nothing leaves this computer until you pick a folder or WebDAV.",
+  backupDatabase: "Database backup",
+  backupFiles: "File backup",
+  backupFull: "Full backup",
+  sync: "Synchronize",
+  cancelJob: "Cancel",
+  history: "History",
+  restoreCopy: "Restore this backup",
+  restored: "Database restored. Open the catalog again.",
+  conflicts: "Conflicts",
+  keepLocal: "Keep local",
+  takeRemote: "Take remote",
+  noConflicts: "No conflicts.",
+  backupSaved: "Backup saved.",
+  settings: "Settings",
+  libraryFolder: "Library folder",
+  notChosenYet: "Not chosen yet",
+  choose: "Choose",
+  theme: "Theme",
+  themeHint: "Light or dark, on this computer.",
+  light: "Light",
+  dark: "Dark",
+  language: "Language",
+  languageHint: "Polish or English. The choice stays on this computer.",
+  polish: "Polski",
+  english: "English",
+  openLibrary: "Open Library",
+  openLibraryHint: "Official API and covers, only when you search for a book.",
+  nationalLibrary: "National Library of Poland",
+  nationalLibraryHint: "The largest Polish bibliographic catalog. The data is public, under CC0.",
+  googleBooks: "Google Books",
+  googleKeySaved: "The key is stored in the system keychain.",
+  googleKeyMissing: "Without your own key this source stays off.",
+  googleKey: "Google Books key",
+  saveKey: "Save key",
+  keySaved: "Key saved.",
+  lubimy: "LubimyCzytać",
+  lubimyHint: "Description, cover, series, publisher and reader rating. The app asks only about the book you are filling in, like the Calibre plugin.",
+  upoluj: "UpolujEbooka",
+  upolujHint: "Description, cover, publisher and ISBN of e-books. The app asks only about the book you are filling in.",
+  unavailable: "unavailable",
+  dailyBackup: "Daily backup",
+  dailyBackupHint: "While the app is open, the database is copied once a day.",
+  backupFolder: "Backup folder",
+  notChosen: "Not chosen",
+  syncTitle: "Sync",
+  syncHint: "A local folder or WebDAV.",
+  folder: "Folder",
+  syncFolder: "Sync folder",
+  webdavUrl: "WebDAV address",
+  webdavUser: "User",
+  saveWebdav: "Save WebDAV",
+  webdavPassword: "WebDAV password",
+  savePassword: "Save password",
+  passwordChanged: "Password changed.",
+  passwordSaved: "Password saved.",
+  export: "Export",
+  import: "Import",
+  exported: "Library exported.",
+  shortcuts: "Shortcuts: Ctrl+F search, Ctrl+N new book, Escape returns to the catalog.",
+  privacy: "The catalog, files, and keys stay on this computer. Keys live in the system keychain, not in SQLite. The app does not send statistics.",
+  loadingSettings: "Loading settings.",
+  searchCover: "Search for a cover",
+  searchingCover: "Searching for a cover…",
+  noCover: "No cover in Open Library or Google Books.",
+  coverUrl: "https address of a cover image",
+  useCover: "Use",
+  sourceGoogle: "Google Books",
+  sourceBn: "National Library of Poland",
+  sourceOpenLibrary: "Open Library",
+  shelfToRead: "To read",
+  shelfLoaned: "Loaned",
+  shelfEbooks: "E-books",
+  shelfUnread: "Unread",
+  failed: "That action could not be completed.",
+};
+
+const dictionaries = { pl, en };
+export type MessageKey = keyof typeof pl;
+
+const exact: Record<string, string> = {
+  "Wpisz tytuł.": "Enter a title.",
+  "Nieprawidłowy ISBN.": "Invalid ISBN.",
+  "Wpisz tytuł, autora albo ISBN.": "Enter a title, an author, or an ISBN.",
+  "Okładka musi mieć adres https.": "A cover address must use https.",
+  "Ten adres okładki jest zablokowany.": "That cover address is blocked.",
+  "Nie udało się pobrać okładki.": "The cover could not be downloaded.",
+  "Okładka jest za duża.": "The cover is too large.",
+  "Ten adres nie wskazuje na obraz okładki.": "That address is not a cover image.",
+  "Nieznany sekret.": "Unknown secret.",
+  "Wpisz co najmniej jednego autora, każdego w osobnej linii.": "Enter at least one author, each on a separate line.",
+  "Nie ma takiej książki.": "That book is not in the catalog.",
+  "Ocena musi być od 1 do 5.": "The rating must be from 1 to 5.",
+  "Postęp musi być od 0 do 100.": "Progress must be from 0 to 100.",
+  "Wpisz nazwę półki.": "Enter a shelf name.",
+  "Półki z filtrem układają się same.": "Filtered shelves arrange themselves.",
+  "Nie ma takiego pliku kopii.": "That backup file is missing.",
+  "Suma kontrolna kopii się nie zgadza. Przywracanie zostało zatrzymane.": "The backup checksum does not match. Restore was stopped.",
+  "Ta książka jest już w katalogu.": "This book is already in the catalog.",
+  "Ten ISBN jest już przy innej książce.": "This ISBN already belongs to another book.",
+  "Ten plik jest już w bibliotece.": "This file is already in the library.",
+  "Baza jest zajęta. Spróbuj za chwilę.": "The database is busy. Try again in a moment.",
+  "Plik jest za duży.": "The file is too large.",
+  "Synchronizacja zakończona.": "Sync finished.",
+  "Są konflikty do rozstrzygnięcia.": "There are conflicts to resolve.",
+  "Gotowe": "Done",
+  "Google Books: brak klucza API. Dodaj go w ustawieniach.": "Google Books: no API key. Add one in settings.",
+  "Nie udało się wykonać tej czynności.": "That action could not be completed.",
+  "Ta czynność działa w oknie aplikacji.": "This action works in the application window.",
+};
+
+const shelves: Record<string, MessageKey> = {
+  "Do przeczytania": "shelfToRead",
+  "Pożyczone": "shelfLoaned",
+  "E-booki": "shelfEbooks",
+  "Nieprzeczytane": "shelfUnread",
+};
+
+let activeLocale: Locale = "pl";
+
+type I18nValue = {
+  locale: Locale;
+  setLocale: (locale: Locale) => void;
+  t: (key: MessageKey) => string;
+  text: (value: string) => string;
+  shelfName: (name: string) => string;
+};
+
+const I18nContext = createContext<I18nValue | null>(null);
+
+export function I18nProvider({ children }: { children: ReactNode }) {
+  const [locale, setLocaleState] = useState<Locale>(() => (localStorage.getItem("library-studio-locale") === "en" ? "en" : "pl"));
+
+  const setLocale = useCallback((next: Locale) => {
+    activeLocale = next;
+    setLocaleState((current) => (current === next ? current : next));
+    localStorage.setItem("library-studio-locale", next);
+    document.documentElement.lang = next;
+    document.title = "Library Studio";
+  }, []);
+
+  useEffect(() => {
+    activeLocale = locale;
+    document.documentElement.lang = locale;
+    document.title = "Library Studio";
+  }, [locale]);
+
+  const value: I18nValue = {
+    locale,
+    setLocale,
+    t: (key) => dictionaries[locale][key],
+    text: (message) => (locale === "en" ? translateBackend(message) : message),
+    shelfName: (name) => {
+      const key = shelves[name];
+      return key && locale === "en" ? en[key] : name;
+    },
+  };
+  return <I18nContext.Provider value={value}>{children}</I18nContext.Provider>;
+}
+
+export function useI18n(): I18nValue {
+  const value = useContext(I18nContext);
+  if (!value) throw new Error("I18nProvider is missing");
+  return value;
+}
+
+export function translateBackend(message: string): string {
+  const known = exact[message] ?? exactMore[message];
+  if (known) return known;
+  const more = translateMore(message);
+  if (more) return more;
+  const file = message.match(/^Ten plik jest już przy książce „(.+)”\.$/);
+  if (file) return `This file is already attached to “${file[1]}”.`;
+  const added = message.match(/^Dodano (\d+), zaktualizowano (\d+)\.$/);
+  if (added) return `Added ${added[1]}, updated ${added[2]}.`;
+  const conflict = message.match(/^Zmieniono „(.+)” w dwóch miejscach\.$/);
+  if (conflict) return `“${conflict[1]}” was changed in both places.`;
+  return message
+    .replace(/^Biblioteka Narodowa: /, "National Library: ")
+    .replace(/^Nie można otworzyć pliku: /, "Cannot open the file: ")
+    .replace(/^Nie można odczytać pliku: /, "Cannot read the file: ")
+    .replace(/^Nie można odczytać eksportu: /, "Cannot read the export: ")
+    .replace(/^Nie udało się utworzyć katalogu biblioteki: /, "Could not create the library folder: ")
+    .replace(/^Nie udało się utworzyć katalogu kopii: /, "Could not create the backup folder: ")
+    .replace(/^Ścieżka wychodzi poza czytnik\.?/, "That path leaves the reader.")
+    .replace(/^Ten dysk nie wygląda na czytnik\. Wskaż folder z książkami\.$/, "This drive does not look like a reader. Choose the folder that holds the books.")
+    .replace(/^Tego folderu nie używam jako czytnika\.$/, "That folder cannot be used as a reader.")
+    .replace(/^Nie ma takiego folderu\.$/, "That folder does not exist.")
+    .replace(/^Na czytniku nie ma wolnej nazwy pliku\.$/, "The reader has no free file name left.");
+}
+
+export function errorText(cause: unknown): string {
+  const raw = typeof cause === "string" && cause.trim()
+    ? cause
+    : cause instanceof Error && cause.message
+      ? cause.message
+      : (activeLocale === "en" ? en.failed : pl.failed);
+  return activeLocale === "en" ? translateBackend(raw) : raw;
+}
