@@ -12,7 +12,7 @@ use crate::domain::{fold, normalize_isbn, strip_html, MetadataHit};
 use crate::infrastructure::importer::decode_entities;
 use crate::infrastructure::metadata::{query_title, surname, urlencoding};
 
-const USER_AGENT: &str = "Library Studio/0.3.2 (private catalog; metadata lookup like the calibre plugin)";
+const USER_AGENT: &str = "Library Studio/0.3.3 (private catalog; metadata lookup like the calibre plugin)";
 const PAGE_LIMIT: usize = 4_000_000;
 const PAGES_PER_LOOKUP: usize = 2;
 /// Najkrótszy odstęp między zapytaniami do jednego serwisu. Przy uzupełnianiu całej biblioteki
@@ -38,20 +38,93 @@ struct Candidate {
     url: String,
     title: String,
     authors: Vec<String>,
+    /// Dane już znane z wyników wyszukiwania (API LubimyCzytać), gdyby strona książki się nie wczytała.
+    preview: Option<MetadataHit>,
 }
 
+/// LubimyCzytać: wyszukiwanie przez API podpowiedzi (`/searcher/getsuggestions`), tak jak w programie Czytnik.
+/// Zwraca tytuł, autora, ISBN, okładkę i ocenę w jednym zapytaniu JSON. Opis i wydawcę dociąga strona
+/// książki. Gdy API nie odpowie, zostaje dawna droga przez stronę wyników wyszukiwania.
 pub fn lubimy(title: &str, author: &str) -> Result<Vec<MetadataHit>, String> {
     let Some(phrase) = phrase(title, author) else { return Ok(Vec::new()) };
-    let html = fetch(&format!("https://lubimyczytac.pl/szukaj/ksiazki?phrase={}", urlencoding(&phrase)))?;
+    let candidates = match lubimy_suggestions(&phrase) {
+        Ok(found) if !found.is_empty() => found,
+        _ => {
+            let html = fetch(&format!("https://lubimyczytac.pl/szukaj/ksiazki?phrase={}", urlencoding(&phrase)))?;
+            lubimy_candidates(&html)
+        }
+    };
     let mut hits = Vec::new();
-    for candidate in pick(lubimy_candidates(&html), title, author) {
-        if let Ok(page) = fetch(&candidate.url) {
-            if let Some(hit) = lubimy_book(&page, &candidate.url) {
+    for candidate in pick(candidates, title, author) {
+        let page = fetch(&candidate.url).ok().and_then(|page| lubimy_book(&page, &candidate.url));
+        match (page, candidate.preview) {
+            (Some(mut hit), Some(preview)) => {
+                hit.isbn13 = hit.isbn13.or(preview.isbn13);
+                hit.isbn10 = hit.isbn10.or(preview.isbn10);
+                hit.cover_url = hit.cover_url.or(preview.cover_url);
+                hit.rating = hit.rating.or(preview.rating);
                 hits.push(hit);
             }
+            (Some(hit), None) => hits.push(hit),
+            (None, Some(preview)) => hits.push(preview),
+            (None, None) => {}
         }
     }
     Ok(hits)
+}
+
+fn lubimy_suggestions(phrase: &str) -> Result<Vec<Candidate>, String> {
+    let text = fetch_with(&format!("https://lubimyczytac.pl/searcher/getsuggestions?phrase={}", urlencoding(phrase)), &[("X-Requested-With", "XMLHttpRequest")])?;
+    let value: Value = serde_json::from_str(&text).map_err(|_| "nieczytelna odpowiedź wyszukiwarki".to_string())?;
+    let results = value.pointer("/items/books/results").and_then(Value::as_array).cloned().unwrap_or_default();
+    Ok(results.iter().filter_map(lubimy_suggestion).collect())
+}
+
+fn lubimy_suggestion(item: &Value) -> Option<Candidate> {
+    let format = item.get("bookFormat").and_then(Value::as_str).unwrap_or("ksiazka");
+    if format != "ksiazka" && format != "ebook" {
+        return None;
+    }
+    let title = item.get("title").and_then(Value::as_str).map(|v| decode_entities(v.trim())).filter(|v| !v.is_empty())?;
+    let url = item.get("url").and_then(Value::as_str).filter(|u| u.starts_with("https://lubimyczytac.pl/ksiazka/"))?.to_string();
+    let authors: Vec<String> = item.pointer("/author/fullname").and_then(Value::as_str).map(|name| vec![decode_entities(name.trim())]).unwrap_or_default();
+    let isbn = item.get("isbn").and_then(Value::as_str).map(normalize_isbn).unwrap_or_default();
+    let rating = item.get("rating").and_then(|r| match r {
+        Value::String(s) => s.replace(',', ".").parse::<f64>().ok(),
+        Value::Number(n) => n.as_f64(),
+        _ => None,
+    });
+    let cover = item.get("cover").and_then(Value::as_str).map(|u| u.replacen("http://", "https://", 1)).filter(|u| u.starts_with("https://") && !u.contains("default-book"));
+    let preview = MetadataHit {
+        source: "lubimyczytac".into(),
+        external_id: url.split("/ksiazka/").nth(1).and_then(|rest| rest.split('/').next()).unwrap_or("").to_string(),
+        title: title.clone(),
+        subtitle: None,
+        authors: authors.clone(),
+        publisher: None,
+        publication_year: None,
+        publication_date: None,
+        language: None,
+        description: None,
+        page_count: None,
+        isbn10: (isbn.len() == 10).then(|| isbn.clone()),
+        isbn13: (isbn.len() == 13).then(|| isbn.clone()),
+        cover_url: cover,
+        series_name: None,
+        genres: Vec::new(),
+        // Ocena w serwisie jest w skali 1–10, w katalogu 1–5.
+        rating: rating.filter(|r| *r > 0.0).map(|r| (r * 5.0).round() / 10.0),
+        info_url: Some(url.clone()),
+    };
+    Some(Candidate { url, title, authors, preview: Some(preview) })
+}
+
+/// Okładki z wyników wyszukiwania LubimyCzytać, bez otwierania stron książek.
+pub fn lubimy_covers(query: &str) -> Result<Vec<(String, String, Vec<String>)>, String> {
+    Ok(lubimy_suggestions(query)?
+        .into_iter()
+        .filter_map(|c| c.preview.and_then(|p| p.cover_url).map(|url| (url, c.title, c.authors)))
+        .collect())
 }
 
 pub fn upoluj(title: &str, author: &str) -> Result<Vec<MetadataHit>, String> {
@@ -79,13 +152,21 @@ fn phrase(title: &str, author: &str) -> Option<String> {
 }
 
 fn fetch(url: &str) -> Result<String, String> {
+    fetch_with(url, &[])
+}
+
+fn fetch_with(url: &str, headers: &[(&str, &str)]) -> Result<String, String> {
     wait_for_turn(url);
     let client = reqwest::blocking::Client::builder()
         .user_agent(USER_AGENT)
         .timeout(Duration::from_secs(20))
         .build()
         .map_err(|e| e.to_string())?;
-    let mut response = client.get(url).header("Accept-Language", "pl,en;q=0.5").send().map_err(|e| e.to_string())?;
+    let mut request = client.get(url).header("Accept-Language", "pl-PL,pl;q=0.9");
+    for (name, value) in headers {
+        request = request.header(*name, *value);
+    }
+    let mut response = request.send().map_err(|e| e.to_string())?;
     let status = response.status();
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
         return Err("serwis prosi o przerwę, spróbuj za kilka minut".into());
@@ -114,6 +195,8 @@ fn pick(candidates: Vec<Candidate>, title: &str, author: &str) -> Vec<Candidate>
                 50
             } else if found.starts_with(&wanted) || wanted_full.starts_with(&found) {
                 35
+            } else if crate::infrastructure::metadata::word_similarity(&found, &wanted_full) >= 0.8 {
+                30
             } else if found.contains(&wanted) {
                 15
             } else {
@@ -151,7 +234,7 @@ fn lubimy_candidates(html: &str) -> Vec<Candidate> {
         let authors = between(card, "book-card__author\">", "</div>")
             .map(|block| strip_html(&decode_entities(block)).split(',').map(|name| name.trim().to_string()).filter(|name| !name.is_empty()).collect())
             .unwrap_or_default();
-        out.push(Candidate { url: format!("https://lubimyczytac.pl{href}"), title: decode_entities(&title), authors });
+        out.push(Candidate { url: format!("https://lubimyczytac.pl{href}"), title: decode_entities(&title), authors, preview: None });
     }
     out
 }
@@ -176,7 +259,7 @@ fn upoluj_candidates(html: &str) -> Vec<Candidate> {
                 authors.push(strip_html(&decode_entities(name)));
             }
         }
-        out.push(Candidate { url: format!("https://upolujebooka.pl/oferta,{href}"), title, authors });
+        out.push(Candidate { url: format!("https://upolujebooka.pl/oferta,{href}"), title, authors, preview: None });
     }
     out
 }
@@ -387,6 +470,21 @@ mod tests {
         assert_eq!(hit.cover_url.as_deref(), Some("https://s.lubimyczytac.pl/upload/books/1-352x500.jpg"));
         assert_eq!(hit.rating, Some(3.7));
         assert_eq!(hit.description.as_deref(), Some("Wayne W. Dyer badał intencję jako siłę.\n\nCzęść II to poradnik."));
+    }
+
+    #[test]
+    fn reads_lubimy_suggestions_api() {
+        let item: Value = serde_json::from_str(r#"{"id":1,"title":"Potęga intencji","cover":"https://s.lubimyczytac.pl/upload/books/1-352x500.jpg","url":"https://lubimyczytac.pl/ksiazka/186701/potega-intencji","isbn":"978-83-246-1114-0","rating":"7,3","author":{"fullname":"Wayne W. Dyer"},"bookFormat":"ksiazka"}"#).unwrap();
+        let candidate = lubimy_suggestion(&item).unwrap();
+        assert_eq!(candidate.authors, vec!["Wayne W. Dyer".to_string()]);
+        let preview = candidate.preview.unwrap();
+        assert_eq!(preview.isbn13.as_deref(), Some("9788324611140"));
+        assert_eq!(preview.rating, Some(3.7));
+        assert_eq!(preview.external_id, "186701");
+        let audio: Value = serde_json::from_str(r#"{"title":"X","url":"https://lubimyczytac.pl/ksiazka/2/x","bookFormat":"audiobook"}"#).unwrap();
+        assert!(lubimy_suggestion(&audio).is_none());
+        let foreign: Value = serde_json::from_str(r#"{"title":"X","url":"https://evil.example/ksiazka/2/x"}"#).unwrap();
+        assert!(lubimy_suggestion(&foreign).is_none());
     }
 
     #[test]

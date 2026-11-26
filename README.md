@@ -41,7 +41,7 @@ npm run installer
 - kopia bazy i plików, przywracanie, eksport i import
 - synchronizacja folderem lokalnym albo WebDAV
 - język polski i angielski, przełącznik jest w ustawieniach
-- metadane i okładki: LubimyCzytać, UpolujEbooka, Biblioteka Narodowa, Open Library i Google Books (każde źródło można wyłączyć w ustawieniach); do LubimyCzytać i UpolujEbooka program pyta tylko o uzupełnianą książkę, z przerwą 1,5 s między zapytaniami
+- metadane i okładki: LubimyCzytać (API wyszukiwarki, jak w programie Czytnik), UpolujEbooka, Biblioteka Narodowa, Open Library i Google Books (działa bez klucza, z dziennym limitem); okładki także z Empiku i Apple Books. Każde źródło można wyłączyć w ustawieniach, a do jednego serwisu program pyta najwyżej co 1,5 s
 
 Przed migracją schematu program zapisuje kopię bazy obok niej (`biblioteka-przed-v3-….sqlite`), a przed przywróceniem kopii zapisuje bieżącą bazę w `kopie-przed-przywroceniem`.
 

@@ -1,6 +1,6 @@
 [package]
 name = "biblioteka"
-version = "0.3.2"
+version = "0.3.3"
 description = "Prywatny katalog książek papierowych i elektronicznych"
 authors = ["Marek"]
 license = "MIT"

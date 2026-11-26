@@ -7,6 +7,8 @@ const SOURCE: Record<string, MessageKey> = {
   google: "sourceGoogle",
   bn: "sourceBn",
   openlibrary: "sourceOpenLibrary",
+  lubimyczytac: "lubimy",
+  upolujebooka: "upoluj",
 };
 
 export function useSourceLabel(): (source: string) => string {

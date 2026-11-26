@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::domain::{fold, strip_html, validate_isbn, CoverCandidate, MetadataHit, MetadataQuery, MetadataSearch, Settings};
 use crate::infrastructure::db::{map_sql, now, Database};
 
-const USER_AGENT: &str = "Library Studio/0.3.2 (private catalog; local metadata lookup)";
+const USER_AGENT: &str = "Library Studio/0.3.3 (private catalog; local metadata lookup)";
 
 /// Szuka w serwisach. Blokada bazy jest brana tylko na odczyt i zapis pamięci podręcznej,
 /// nie na czas zapytań sieciowych.
@@ -49,14 +49,12 @@ pub fn search(db: &Database, settings: &Settings, api_key: Option<&str>, query: 
         }
     }
     if settings.google_books {
-        match api_key.filter(|key| !key.is_empty()) {
-            None => errors.push("Google Books: brak klucza API. Dodaj go w ustawieniach.".into()),
-            Some(key) => match cached_or_fetch(db, "google", &cache_key("google", isbn.as_deref(), &title, &author), || {
-                google_books(isbn.as_deref(), &title, &author, key)
-            }) {
-                Ok(mut found) => hits.append(&mut found),
-                Err(error) => errors.push(format!("Google Books: {error}")),
-            },
+        let key = api_key.filter(|key| !key.is_empty());
+        match cached_or_fetch(db, "google", &cache_key("google", isbn.as_deref(), &title, &author), || {
+            google_books(isbn.as_deref(), &title, &author, key)
+        }) {
+            Ok(mut found) => hits.append(&mut found),
+            Err(error) => errors.push(format!("Google Books: {error}")),
         }
     }
     hits.dedup_by(|a, b| a.source == b.source && a.external_id == b.external_id);
@@ -221,7 +219,8 @@ fn hit_from_open_library_doc(doc: &Value) -> MetadataHit {
     }
 }
 
-fn google_books(isbn: Option<&str>, title: &str, author: &str, key: &str) -> Result<Vec<MetadataHit>, String> {
+/// Google Books działa też bez klucza API (tak pyta program Czytnik); klucz tylko podnosi dzienny limit.
+fn google_books(isbn: Option<&str>, title: &str, author: &str, key: Option<&str>) -> Result<Vec<MetadataHit>, String> {
     let mut q = Vec::new();
     if let Some(isbn) = isbn {
         q.push(format!("isbn:{isbn}"));
@@ -237,12 +236,14 @@ fn google_books(isbn: Option<&str>, title: &str, author: &str, key: &str) -> Res
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    let url = format!(
-        "https://www.googleapis.com/books/v1/volumes?q={}&maxResults=8&printType=books&key={}",
-        urlencoding(&q.join(" ")),
-        urlencoding(key)
-    );
-    let value = get_json(&url)?;
+    let mut url = format!("https://www.googleapis.com/books/v1/volumes?q={}&maxResults=8&printType=books", urlencoding(&q.join(" ")));
+    if let Some(key) = key {
+        url.push_str("&key=");
+        url.push_str(&urlencoding(key));
+    }
+    let value = get_json(&url).map_err(|error| {
+        if error.contains("429") { "przekroczony dzienny limit zapytań, spróbuj później albo dodaj klucz API".to_string() } else { error }
+    })?;
     if let Some(message) = value.get("error").and_then(|e| e.get("message")).and_then(|m| m.as_str()) {
         return Err(message.to_string());
     }
@@ -465,11 +466,10 @@ pub fn best_hit(settings: &Settings, api_key: Option<&str>, title: &str, author:
         collect(crate::infrastructure::bookstores::upoluj(title, author));
     }
     if settings.google_books {
-        if let Some(key) = api_key.filter(|key| !key.is_empty()) {
-            collect(google_books(isbn.as_deref(), title, author, key));
-            if isbn.is_some() {
-                collect(google_books(None, title, author, key));
-            }
+        let key = api_key.filter(|key| !key.is_empty());
+        collect(google_books(isbn.as_deref(), title, author, key));
+        if isbn.is_some() {
+            collect(google_books(None, title, author, key));
         }
     }
     merge_hits(hits, title, author, isbn.as_deref())
@@ -526,6 +526,18 @@ fn fill(slot: &mut Option<String>, value: Option<String>) {
             *slot = Some(value);
         }
     }
+}
+
+/// Współczynnik Dice'a na zbiorach słów (0..1): 1 to te same słowa, niezależnie od kolejności.
+/// Słowa jednoliterowe są pomijane, tak jak w programie Czytnik.
+pub(crate) fn word_similarity(a: &str, b: &str) -> f64 {
+    let words = |text: &str| -> std::collections::HashSet<String> { fold(text).split_whitespace().filter(|w| w.chars().count() > 1).map(str::to_string).collect() };
+    let (left, right) = (words(a), words(b));
+    if left.is_empty() || right.is_empty() {
+        return 0.0;
+    }
+    let common = left.intersection(&right).count();
+    (2 * common) as f64 / (left.len() + right.len()) as f64
 }
 
 /// Pierwszy autor w kolejności „Imię Nazwisko”, bez tytułów i dopisków w nawiasach.
@@ -633,6 +645,9 @@ fn score_hit(hit: &MetadataHit, title: &str, author: &str, isbn: Option<&str>) -
     let other_subtitle = found != found_short && wanted != wanted_short && found != wanted;
     if !wanted.is_empty() && found == wanted {
         score += 45;
+    } else if word_similarity(&found, &wanted) >= 0.8 {
+        // Te same słowa w innej kolejności albo z drobną różnicą (miara z programu Czytnik).
+        score += 40;
     } else if !wanted.is_empty() && (found_short == wanted_short || starts(&found, &wanted_short) || starts(&wanted, &found_short)) {
         score += if other_subtitle { 20 } else { 40 };
     } else if !wanted_short.is_empty() && (found.contains(&wanted_short) || wanted.contains(&found_short)) {
@@ -668,18 +683,30 @@ pub fn search_covers(settings: &Settings, api_key: Option<&str>, query: &Metadat
         }
     }
     if settings.google_books {
-        if let Some(key) = api_key.filter(|key| !key.is_empty()) {
-            if let Ok(hits) = google_books(isbn.as_deref(), &title, &author, key) {
-                for hit in hits {
-                    push_cover(&mut covers, &hit);
-                }
+        if let Ok(hits) = google_books(isbn.as_deref(), &title, &author, api_key.filter(|key| !key.is_empty())) {
+            for hit in hits {
+                push_cover(&mut covers, &hit);
             }
         }
     }
-    if settings.lubimy_czytac {
-        if let Ok(hits) = crate::infrastructure::bookstores::lubimy(&title, &author) {
-            for hit in hits {
-                push_cover(&mut covers, &hit);
+    let phrase = [query_title(&title), surname(&author)].into_iter().filter(|part| !part.is_empty()).collect::<Vec<_>>().join(" ");
+    if settings.lubimy_czytac && !phrase.is_empty() {
+        if let Ok(found) = crate::infrastructure::bookstores::lubimy_covers(&phrase) {
+            for (url, found_title, authors) in found {
+                push_raw_cover(&mut covers, "lubimyczytac", url, found_title, authors);
+            }
+        }
+    }
+    // Okładki z Empiku i Apple Books — dodatkowe źródła z programu Czytnik.
+    if !phrase.is_empty() {
+        if let Ok(found) = empik_covers(&phrase) {
+            for (url, found_title) in found {
+                push_raw_cover(&mut covers, "Empik", url, found_title, Vec::new());
+            }
+        }
+        if let Ok(found) = apple_covers(&phrase) {
+            for (url, found_title, authors) in found {
+                push_raw_cover(&mut covers, "Apple Books", url, found_title, authors);
             }
         }
     }
@@ -690,8 +717,64 @@ pub fn search_covers(settings: &Settings, api_key: Option<&str>, query: &Metadat
             }
         }
     }
-    covers.truncate(12);
+    covers.truncate(24);
     Ok(covers)
+}
+
+fn push_raw_cover(covers: &mut Vec<CoverCandidate>, source: &str, url: String, title: String, authors: Vec<String>) {
+    if url.is_empty() || covers.iter().any(|cover| cover.url == url) {
+        return;
+    }
+    covers.push(CoverCandidate { source: source.into(), title, authors, url });
+}
+
+/// Empik: okładki z wyników wyszukiwania; wariant „-p-” to miniatura, „-b-” pełny rozmiar.
+fn empik_covers(query: &str) -> Result<Vec<(String, String)>, String> {
+    let url = format!("https://www.empik.com/szukaj/produkt?q={}&productTypeFacet=ksiazki", urlencoding(query));
+    let response = client()?.get(&url).header("Accept-Language", "pl-PL,pl;q=0.9").send().map_err(|e| e.to_string())?;
+    if !response.status().is_success() {
+        return Err(format!("odpowiedź {}", response.status()));
+    }
+    let html = response.text().map_err(|e| e.to_string())?;
+    let mut out = Vec::new();
+    for chunk in html.split("<img").skip(1) {
+        let tag = chunk.split('>').next().unwrap_or("");
+        let Some(src) = tag.split("lazy-img=\"").nth(1).and_then(|rest| rest.split('"').next()) else { continue };
+        if !src.starts_with("https://ecsmedia.pl/") {
+            continue;
+        }
+        let alt = tag.split("alt=\"").nth(1).and_then(|rest| rest.split('"').next()).unwrap_or("");
+        out.push((src.replace("-p-iext", "-b-iext"), crate::infrastructure::importer::decode_entities(alt.trim())));
+        if out.len() >= 8 {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+/// Apple Books (iTunes Search API): miniatura ma ten sam adres co pełny rozmiar, wystarczy zmienić wymiar.
+fn apple_covers(query: &str) -> Result<Vec<(String, String, Vec<String>)>, String> {
+    let url = format!("https://itunes.apple.com/search?term={}&media=ebook&limit=8&country=pl", urlencoding(query));
+    let value = get_json(&url)?;
+    Ok(value
+        .get("results")
+        .and_then(Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let art = item.get("artworkUrl100").and_then(Value::as_str)?;
+                    let big = match art.rsplit_once('/') {
+                        Some((base, _)) => format!("{base}/600x600bb.jpg"),
+                        None => art.to_string(),
+                    };
+                    let title = item.get("trackName").and_then(Value::as_str).unwrap_or("").to_string();
+                    let authors = item.get("artistName").and_then(Value::as_str).map(|a| vec![a.to_string()]).unwrap_or_default();
+                    Some((big, title, authors))
+                })
+                .collect()
+        })
+        .unwrap_or_default())
 }
 
 fn push_cover(covers: &mut Vec<CoverCandidate>, hit: &MetadataHit) {
@@ -996,6 +1079,13 @@ mod query_tests {
     }
 
     #[test]
+    fn word_similarity_ignores_order() {
+        assert_eq!(word_similarity("Pan Tadeusz", "Tadeusz, Pan"), 1.0);
+        assert!(word_similarity("Bóg, kasa i rock'n'roll", "Bog kasa rock n roll") >= 0.8);
+        assert!(word_similarity("Solaris", "Niezwyciężony") < 0.1);
+    }
+
+    #[test]
     fn a_different_subtitle_does_not_win_over_the_exact_title() {
         let wanted = "Myśl i bogać się. Wersja oryginalna, odświeżona i zaktualizowana";
         let hits = vec![
@@ -1006,3 +1096,4 @@ mod query_tests {
         assert_eq!(best.source, "upolujebooka");
     }
 }
+
