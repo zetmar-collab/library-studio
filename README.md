@@ -25,7 +25,7 @@ npm run installer
 
 ## Co robi ta wersja
 
-- dodawanie książki po ISBN, tytule, skanie kodu albo ręcznie, także seryjnie (kamera albo czytnik kodów, wiele książek naraz)
+- dodawanie książki po ISBN, tytule, skanie kodu albo ręcznie, także seryjnie (kamera albo czytnik kodów, wiele książek naraz) i z dowolnego folderu na komputerze (tytuł i autor z metadanych pliku albo folderu Calibre, pliki kopiowane do biblioteki)
 - metadane z Open Library, Biblioteki Narodowej i z Google Books, gdy podasz własny klucz
 - wyszukiwanie okładki w Open Library i Google Books albo wklejenie adresu obrazu
 - pełna edycja metadanych: podtytuł, tłumacze, seria i tom, gatunki, ISBN, liczba stron

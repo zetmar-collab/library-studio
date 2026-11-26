@@ -204,6 +204,7 @@ export function App() {
             safeRefresh();
           }}
           onBatchSaved={safeRefresh}
+          progress={progress}
         />
       ) : null}
       {view === "book" && bookId ? (

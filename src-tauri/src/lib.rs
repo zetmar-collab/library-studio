@@ -128,6 +128,8 @@ pub fn run() {
             commands::empty_trash,
             commands::find_duplicates,
             commands::file_repairs,
+            commands::scan_folder,
+            commands::import_folder,
             commands::apply_file_repairs,
             commands::ignore_duplicates,
             commands::merge_books,

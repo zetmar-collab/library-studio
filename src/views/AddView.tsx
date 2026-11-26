@@ -3,17 +3,19 @@ import { api } from "../api";
 import { toIsbn13 } from "../barcode";
 import { CoverPicker, useSourceLabel } from "../CoverPicker";
 import { useI18n } from "../i18n";
+import { FolderImport } from "./FolderImport";
 import { lines } from "../text";
-import { errorText, type BookDraft, type MetadataHit } from "../types";
+import { errorText, type BookDraft, type JobProgress, type MetadataHit } from "../types";
 
 type AddViewProps = {
   onSaved: (bookId: string, created: boolean) => void;
   onBatchSaved: () => void;
   onDirty: (dirty: boolean) => void;
   onCancel: () => void;
+  progress: JobProgress | null;
 };
 
-type Mode = "isbn" | "search" | "scan" | "batch" | "manual";
+type Mode = "isbn" | "search" | "scan" | "batch" | "folder" | "manual";
 
 type QueueItem = {
   isbn: string;
@@ -62,7 +64,7 @@ function bestForIsbn(hits: MetadataHit[], isbn: string): MetadataHit | undefined
 
 const input = "w-full border border-rule bg-sheet px-3 py-2 dark:border-night-rule dark:bg-night";
 
-export function AddView({ onSaved, onBatchSaved, onDirty, onCancel }: AddViewProps) {
+export function AddView({ onSaved, onBatchSaved, onDirty, onCancel, progress }: AddViewProps) {
   const { t, text } = useI18n();
   const sourceLabel = useSourceLabel();
   const [mode, setMode] = useState<Mode>("isbn");
@@ -220,6 +222,7 @@ export function AddView({ onSaved, onBatchSaved, onDirty, onCancel }: AddViewPro
     ["search", t("modeTitle")],
     ["scan", t("modeScan")],
     ["batch", t("modeBatch")],
+    ["folder", t("modeFolder")],
     ["manual", t("modeManual")],
   ];
   const found = queue.filter((item) => item.status === "found").length;
@@ -253,6 +256,7 @@ export function AddView({ onSaved, onBatchSaved, onDirty, onCancel }: AddViewPro
           <button className="w-fit bg-binding px-4 py-2 text-sheet" disabled={busy}>{t("search")}</button>
         </form>
       ) : null}
+      {mode === "folder" ? <FolderImport progress={progress} onImported={onBatchSaved} /> : null}
       {mode === "batch" ? (
         <div className="mt-6">
           <p className="max-w-[60ch] text-muted">{t("batchLead")}</p>

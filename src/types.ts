@@ -255,6 +255,18 @@ export type TransferNote = {
   detail: string;
 };
 
+export type FolderFile = {
+  relativePath: string;
+  fileName: string;
+  size: number;
+  format: string;
+  title: string;
+  authors: string[];
+  alreadyInCatalog: boolean;
+};
+
+export type FolderScan = { root: string; files: FolderFile[]; truncated: boolean };
+
 export type TransferReport = {
   copied: number;
   skipped: number;

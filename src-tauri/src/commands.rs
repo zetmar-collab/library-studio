@@ -405,6 +405,37 @@ pub async fn import_from_reader(app: AppHandle, root: String, relative_paths: Ve
     .await
 }
 
+// ---------- Dodawanie z folderu na komputerze ----------
+
+#[tauri::command]
+pub async fn scan_folder(app: AppHandle, path: String) -> Res<crate::infrastructure::folder::FolderScan> {
+    run(app, move |app, state| {
+        let _guard = JobGuard::start(state)?;
+        let paths = paths(state)?;
+        state.db.with(|conn| {
+            crate::infrastructure::folder::scan(conn, &paths, Path::new(&path), &state.cancel, &mut |current, total, label| {
+                emit(app, "folder", current, total, label, current == total);
+            })
+        })
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn import_folder(app: AppHandle, root: String, relative_paths: Vec<String>) -> Res<reader::TransferReport> {
+    run(app, move |app, state| {
+        let _guard = JobGuard::start(state)?;
+        let paths = paths(state)?;
+        let result = state.db.with(|conn| {
+            crate::infrastructure::folder::import(conn, &paths, Path::new(&root), &relative_paths, &state.cancel, &mut |current, total, label| {
+                emit(app, "folder", current, total, label, current == total);
+            })
+        });
+        log_error(state, "dodawanie z folderu", result)
+    })
+    .await
+}
+
 // ---------- Pliki ----------
 
 #[tauri::command]

@@ -12,7 +12,7 @@ use crate::domain::{fold, normalize_isbn, strip_html, MetadataHit};
 use crate::infrastructure::importer::decode_entities;
 use crate::infrastructure::metadata::{query_title, surname, urlencoding};
 
-const USER_AGENT: &str = "Library Studio/0.3.3 (private catalog; metadata lookup like the calibre plugin)";
+const USER_AGENT: &str = "Library Studio/0.3.4 (private catalog; metadata lookup like the calibre plugin)";
 const PAGE_LIMIT: usize = 4_000_000;
 const PAGES_PER_LOOKUP: usize = 2;
 /// Najkrótszy odstęp między zapytaniami do jednego serwisu. Przy uzupełnianiu całej biblioteki

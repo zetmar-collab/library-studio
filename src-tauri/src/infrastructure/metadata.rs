@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::domain::{fold, strip_html, validate_isbn, CoverCandidate, MetadataHit, MetadataQuery, MetadataSearch, Settings};
 use crate::infrastructure::db::{map_sql, now, Database};
 
-const USER_AGENT: &str = "Library Studio/0.3.3 (private catalog; local metadata lookup)";
+const USER_AGENT: &str = "Library Studio/0.3.4 (private catalog; local metadata lookup)";
 
 /// Szuka w serwisach. Blokada bazy jest brana tylko na odczyt i zapis pamięci podręcznej,
 /// nie na czas zapytań sieciowych.

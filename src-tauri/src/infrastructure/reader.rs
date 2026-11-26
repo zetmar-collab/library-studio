@@ -290,13 +290,13 @@ fn reader_draft(source: &Path, device_root: &Path, calibre: &std::collections::H
     draft
 }
 
-fn guess_name(source: &Path) -> (String, String) {
+pub(crate) fn guess_name(source: &Path) -> (String, String) {
     let file_name = source.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_else(|| "ksiazka".into());
     let parent = source.parent().and_then(|dir| dir.file_name()).map(|name| name.to_string_lossy().to_string());
     split_ebook_name_in(&file_name, parent.as_deref())
 }
 
-fn draft_for(title: &str, author: &str) -> BookDraft {
+pub(crate) fn draft_for(title: &str, author: &str) -> BookDraft {
     BookDraft {
         id: None,
         title: title.to_string(),
@@ -418,7 +418,7 @@ fn place_copy(source: &Path, directory: &Path, name: &str) -> Result<bool, Strin
     Ok(true)
 }
 
-fn resolve_inside(base: &Path, relative: &str) -> Result<PathBuf, String> {
+pub(crate) fn resolve_inside(base: &Path, relative: &str) -> Result<PathBuf, String> {
     let relative_path = Path::new(relative);
     if relative_path.is_absolute() || relative_path.components().any(|part| matches!(part, Component::ParentDir | Component::RootDir | Component::Prefix(_))) {
         return Err("Ścieżka wychodzi poza czytnik.".into());
@@ -565,7 +565,7 @@ fn calibre_location(root: &Path) -> Option<String> {
     value.get("location_code")?.as_str().map(str::to_string)
 }
 
-fn ebook_format(path: &Path) -> Option<String> {
+pub(crate) fn ebook_format(path: &Path) -> Option<String> {
     let name = path.file_name()?.to_string_lossy().to_lowercase();
     if name.ends_with(".kepub.epub") {
         return Some("kepub.epub".into());
@@ -581,11 +581,11 @@ fn normalize_format(stored: &str, path: &Path) -> String {
     ebook_format(path).unwrap_or_else(|| stored.trim().to_lowercase())
 }
 
-fn known_ebook(format: &str) -> bool {
+pub(crate) fn known_ebook(format: &str) -> bool {
     KINDLE.accepts(format) || KOBO.accepts(format) || POCKETBOOK.accepts(format) || TOLINO.accepts(format) || BOOX.accepts(format)
 }
 
-fn skip_dir(name: &str) -> bool {
+pub(crate) fn skip_dir(name: &str) -> bool {
     let value = name.to_lowercase();
     value.starts_with('.')
         || value.ends_with(".sdr")
@@ -595,11 +595,11 @@ fn skip_dir(name: &str) -> bool {
         )
 }
 
-fn is_drive_root(path: &Path) -> bool {
+pub(crate) fn is_drive_root(path: &Path) -> bool {
     path.parent().is_none() || path.components().count() <= 2 && path.components().any(|part| matches!(part, Component::Prefix(_)))
 }
 
-fn blocked_path(path: &Path) -> bool {
+pub(crate) fn blocked_path(path: &Path) -> bool {
     let text = path.to_string_lossy().to_lowercase();
     if let Ok(windows) = std::env::var("WINDIR") {
         if text.starts_with(&windows.to_lowercase()) {
