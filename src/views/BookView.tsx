@@ -143,7 +143,9 @@ export function BookView({ id, shelves, onBack, onChanged, onDirty, onDeleted, o
       onChanged();
       if (done) setMessage(done);
     } catch (cause) {
+      // Komunikat na dole strony łatwo przeoczyć, więc błąd pokazujemy też w dymku.
       setMessage(errorText(cause));
+      notify(errorText(cause));
     } finally {
       setBusy(false);
     }
@@ -227,7 +229,7 @@ export function BookView({ id, shelves, onBack, onChanged, onDirty, onDeleted, o
         <div className="min-w-0 flex-1">
           <label className="block text-sm text-muted">
             {t("modeTitle")}
-            <input value={form.title} onChange={(event) => set({ title: event.target.value })} className="block w-full bg-transparent font-display text-4xl text-ink dark:text-night-ink" />
+            <input form="book-meta" value={form.title} onChange={(event) => set({ title: event.target.value })} className="block w-full bg-transparent font-display text-4xl text-ink dark:text-night-ink" />
           </label>
           <p className="mt-2 text-sm text-muted">
             ISBN {edition?.isbn13 ?? edition?.isbn10 ?? t("isbnMissing")} · {t("sourcePrefix")} {edition?.metadataSource ?? t("sourceManual")}
@@ -256,7 +258,7 @@ export function BookView({ id, shelves, onBack, onChanged, onDirty, onDeleted, o
         </div>
       </div>
 
-      <form className="mt-8 grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); saveMeta(); }}>
+      <form id="book-meta" className="mt-8 grid gap-4 sm:grid-cols-2" onSubmit={(event) => { event.preventDefault(); saveMeta(); }}>
         <Field label={t("authorsLines")}><textarea value={form.authors} onChange={(event) => set({ authors: event.target.value })} rows={3} className={input} /></Field>
         <Field label={t("translatorsLines")}><textarea value={form.translators} onChange={(event) => set({ translators: event.target.value })} rows={3} className={input} /></Field>
         <Field label={t("subtitle")}><input value={form.subtitle} onChange={(event) => set({ subtitle: event.target.value })} className={input} /></Field>
@@ -281,6 +283,7 @@ export function BookView({ id, shelves, onBack, onChanged, onDirty, onDeleted, o
         <div className="flex items-center gap-3 sm:col-span-2">
           <button type="submit" disabled={busy} className="bg-binding px-4 py-2 text-sheet disabled:opacity-50">{t("saveDetails")}</button>
           {dirty ? <span className="text-sm text-stamp">{t("unsavedChanges")}</span> : null}
+          {!dirty && message ? <span className="text-sm" role="status">{message}</span> : null}
         </div>
       </form>
 

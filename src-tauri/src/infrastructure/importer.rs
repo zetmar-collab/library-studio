@@ -76,6 +76,36 @@ fn existing_book(conn: &Connection, row: &ImportRow) -> Result<Option<String>, S
     store::find_book_by_key(conn, &crate::domain::dedupe_key(row.title.trim(), &authors))
 }
 
+/// Wiersz importu jako szkic nowej książki.
+pub(crate) fn draft_from_row(row: &ImportRow, source: &str) -> BookDraft {
+    let authors: Vec<String> = row.authors.iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect();
+    BookDraft {
+        id: None,
+        title: row.title.trim().to_string(),
+        original_title: None,
+        subtitle: None,
+        authors: if authors.is_empty() { vec!["Nieznany autor".into()] } else { authors },
+        translators: vec![],
+        publisher: row.publisher.clone(),
+        publication_year: row.year,
+        language: row.language.clone(),
+        description: row.description.clone(),
+        series_name: row.series_name.clone(),
+        series_number: row.series_number.clone(),
+        genres: row.genres.clone(),
+        tags: row.tags.clone(),
+        isbn10: row.isbn10.clone(),
+        isbn13: row.isbn13.clone(),
+        page_count: row.page_count,
+        cover_url: None,
+        metadata_source: Some(source.into()),
+        external_id: None,
+        edition_id: None,
+        average_rating: None,
+        rating_source: None,
+    }
+}
+
 pub fn commit(conn: &Connection, paths: &StorePaths, rows: &[ImportRow]) -> Result<ImportSummary, String> {
     let mut summary = ImportSummary::default();
     let to_read_shelf: Option<String> = conn
@@ -83,32 +113,7 @@ pub fn commit(conn: &Connection, paths: &StorePaths, rows: &[ImportRow]) -> Resu
         .optional()
         .map_err(map_sql)?;
     for row in rows {
-        let authors: Vec<String> = row.authors.iter().map(|a| a.trim().to_string()).filter(|a| !a.is_empty()).collect();
-        let draft = BookDraft {
-            id: None,
-            title: row.title.trim().to_string(),
-            original_title: None,
-            subtitle: None,
-            authors: if authors.is_empty() { vec!["Nieznany autor".into()] } else { authors },
-            translators: vec![],
-            publisher: row.publisher.clone(),
-            publication_year: row.year,
-            language: row.language.clone(),
-            description: row.description.clone(),
-            series_name: row.series_name.clone(),
-            series_number: row.series_number.clone(),
-            genres: row.genres.clone(),
-            tags: row.tags.clone(),
-            isbn10: row.isbn10.clone(),
-            isbn13: row.isbn13.clone(),
-            page_count: row.page_count,
-            cover_url: None,
-            metadata_source: Some("import".into()),
-            external_id: None,
-            edition_id: None,
-            average_rating: None,
-            rating_source: None,
-        };
+        let draft = draft_from_row(row, "import");
         let saved = match store::save_book(conn, draft, paths, None) {
             Ok(saved) => saved,
             Err(error) => {
@@ -294,7 +299,7 @@ pub(crate) fn decode_entities(value: &str) -> String {
     out.replace("&amp;", "&")
 }
 
-fn assign_isbn(row: &mut ImportRow, raw: &str) {
+pub(crate) fn assign_isbn(row: &mut ImportRow, raw: &str) {
     let Ok(isbn) = validate_isbn(raw) else { return };
     if isbn.len() == 13 {
         row.isbn13.get_or_insert(isbn);

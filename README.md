@@ -46,3 +46,7 @@ npm run installer
 Przed migracją schematu program zapisuje kopię bazy obok niej (`biblioteka-przed-v3-….sqlite`), a przed przywróceniem kopii zapisuje bieżącą bazę w `kopie-przed-przywroceniem`.
 
 Baza SQLite powstaje przy pierwszym uruchomieniu okna, w katalogu danych aplikacji (`biblioteka.sqlite`), w trybie WAL. Schemat jest w `src-tauri/migrations`.
+
+## Licencja
+
+MIT, zobacz plik [LICENSE](LICENSE).

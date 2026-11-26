@@ -6,7 +6,7 @@ use serde_json::Value;
 use crate::domain::{fold, strip_html, validate_isbn, CoverCandidate, MetadataHit, MetadataQuery, MetadataSearch, Settings};
 use crate::infrastructure::db::{map_sql, now, Database};
 
-const USER_AGENT: &str = "Library Studio/0.3.1 (private catalog; local metadata lookup)";
+const USER_AGENT: &str = "Library Studio/0.3.2 (private catalog; local metadata lookup)";
 
 /// Szuka w serwisach. Blokada bazy jest brana tylko na odczyt i zapis pamięci podręcznej,
 /// nie na czas zapytań sieciowych.
@@ -736,59 +736,60 @@ fn get_json(url: &str) -> Result<Value, String> {
 
 const COVER_LIMIT: usize = 8_000_000;
 
-/// Sprawdza adres okładki: tylko https i tylko hosty, które nie prowadzą do sieci lokalnej.
-/// Nazwa hosta jest rozwiązywana, więc nie przejdzie też domena wskazująca na 127.0.0.1 czy 192.168.x.x.
-fn cover_url_allowed(url: &reqwest::Url) -> Result<(), String> {
+/// Sprawdza adres okładki i zwraca adres IP, z którym wolno się połączyć: tylko https i tylko hosty,
+/// które nie prowadzą do sieci lokalnej. Połączenie idzie potem dokładnie na ten adres (bez ponownego
+/// pytania DNS), więc domena nie może w międzyczasie „przeskoczyć” na 127.0.0.1 czy 192.168.x.x.
+fn cover_target(url: &reqwest::Url) -> Result<(String, std::net::SocketAddr), String> {
     if url.scheme() != "https" {
         return Err("Okładka musi mieć adres https.".into());
     }
-    let host = url.host_str().unwrap_or("").trim_matches(['[', ']']);
+    let host = url.host_str().unwrap_or("").trim_matches(['[', ']']).to_string();
     if host.is_empty() || host.eq_ignore_ascii_case("localhost") || host.ends_with(".local") || host.ends_with(".localhost") {
         return Err("Ten adres okładki jest zablokowany.".into());
     }
+    let port = url.port_or_known_default().unwrap_or(443);
     if let Ok(ip) = host.parse::<std::net::IpAddr>() {
-        return if ip_is_private(ip) { Err("Ten adres okładki jest zablokowany.".into()) } else { Ok(()) };
+        return if ip_is_private(ip) { Err("Ten adres okładki jest zablokowany.".into()) } else { Ok((host, std::net::SocketAddr::new(ip, port))) };
     }
     use std::net::ToSocketAddrs;
-    let port = url.port_or_known_default().unwrap_or(443);
-    let addresses: Vec<_> = (host, port).to_socket_addrs().map_err(|_| "Nie udało się pobrać okładki.".to_string())?.collect();
+    let addresses: Vec<_> = (host.as_str(), port).to_socket_addrs().map_err(|_| "Nie udało się pobrać okładki.".to_string())?.collect();
     if addresses.is_empty() || addresses.iter().any(|address| ip_is_private(address.ip())) {
         return Err("Ten adres okładki jest zablokowany.".into());
     }
-    Ok(())
+    Ok((host, addresses[0]))
 }
 
 pub fn download_cover(url: &str) -> Result<Vec<u8>, String> {
-    let parsed = reqwest::Url::parse(url).map_err(|_| "Adres okładki jest nieprawidłowy.".to_string())?;
-    cover_url_allowed(&parsed)?;
-    // Każde przekierowanie przechodzi tę samą kontrolę co pierwszy adres.
-    let policy = reqwest::redirect::Policy::custom(|attempt| {
-        if attempt.previous().len() >= 5 {
-            attempt.error("za dużo przekierowań")
-        } else if cover_url_allowed(attempt.url()).is_err() {
-            attempt.stop()
-        } else {
-            attempt.follow()
+    let mut current = reqwest::Url::parse(url).map_err(|_| "Adres okładki jest nieprawidłowy.".to_string())?;
+    // Przekierowania obsługujemy sami: każdy kolejny adres przechodzi tę samą kontrolę i to samo przypięcie IP.
+    for _ in 0..5 {
+        let (host, address) = cover_target(&current)?;
+        let client = reqwest::blocking::Client::builder()
+            .user_agent(USER_AGENT)
+            .timeout(Duration::from_secs(20))
+            .redirect(reqwest::redirect::Policy::none())
+            .resolve(&host, address)
+            .build()
+            .map_err(|e| e.to_string())?;
+        let mut response = client.get(current.clone()).send().map_err(|e| e.to_string())?;
+        if response.status().is_redirection() {
+            let location = response.headers().get(reqwest::header::LOCATION).and_then(|v| v.to_str().ok()).ok_or_else(|| "Nie udało się pobrać okładki.".to_string())?;
+            current = current.join(location).map_err(|_| "Nie udało się pobrać okładki.".to_string())?;
+            continue;
         }
-    });
-    let client = reqwest::blocking::Client::builder()
-        .user_agent(USER_AGENT)
-        .timeout(Duration::from_secs(20))
-        .redirect(policy)
-        .build()
-        .map_err(|e| e.to_string())?;
-    let mut response = client.get(parsed).send().map_err(|e| e.to_string())?;
-    if !response.status().is_success() {
-        return Err("Nie udało się pobrać okładki.".into());
+        if !response.status().is_success() {
+            return Err("Nie udało się pobrać okładki.".into());
+        }
+        if response.content_length().is_some_and(|length| length as usize > COVER_LIMIT) {
+            return Err("Okładka jest za duża.".into());
+        }
+        let bytes = crate::infrastructure::files::read_limited(&mut response, COVER_LIMIT).map_err(|_| "Okładka jest za duża.".to_string())?;
+        if image_type(&bytes).is_none() {
+            return Err("Ten adres nie wskazuje na obraz okładki.".into());
+        }
+        return Ok(bytes);
     }
-    if response.content_length().is_some_and(|length| length as usize > COVER_LIMIT) {
-        return Err("Okładka jest za duża.".into());
-    }
-    let bytes = crate::infrastructure::files::read_limited(&mut response, COVER_LIMIT).map_err(|_| "Okładka jest za duża.".to_string())?;
-    if image_type(&bytes).is_none() {
-        return Err("Ten adres nie wskazuje na obraz okładki.".into());
-    }
-    Ok(bytes)
+    Err("Za dużo przekierowań przy pobieraniu okładki.".into())
 }
 
 pub fn cover_data_url(bytes: &[u8]) -> String {

@@ -1,5 +1,5 @@
 #define MyAppName "Library Studio"
-#define MyAppVersion "0.3.1"
+#define MyAppVersion "0.3.2"
 #define MyAppExeName "biblioteka.exe"
 #ifndef ExePath
   #define ExePath "..\src-tauri\target\release\biblioteka.exe"
@@ -26,7 +26,7 @@ PrivilegesRequired=lowest
 PrivilegesRequiredOverridesAllowed=dialog
 CloseApplications=yes
 RestartApplications=no
-VersionInfoVersion=0.3.1.0
+VersionInfoVersion=0.3.2.0
 VersionInfoProductName=Library Studio
 VersionInfoDescription=Private book catalog
 

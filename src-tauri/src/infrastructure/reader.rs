@@ -6,6 +6,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 
 use crate::domain::{safe_component, BookDraft};
+use crate::infrastructure::ebook_meta;
 use crate::infrastructure::files::hash_file;
 use crate::infrastructure::store::{self, StorePaths};
 
@@ -216,6 +217,8 @@ pub fn import_books(conn: &Connection, paths: &StorePaths, root: &Path, relative
     let scan = scan_dir(&device, profile);
     let mut report = TransferReport { copied: 0, skipped: 0, added: 0, notes: Vec::new() };
     let total = relative_paths.len() as u64;
+    let device_root = PathBuf::from(&device.root);
+    let calibre = ebook_meta::calibre_index(&device_root);
     for (index, relative) in relative_paths.iter().enumerate() {
         if cancel.load(Ordering::Relaxed) {
             break;
@@ -247,9 +250,9 @@ pub fn import_books(conn: &Connection, paths: &StorePaths, root: &Path, relative
             report.skipped += 1;
             continue;
         }
-        let file_name = source.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_else(|| "ksiazka".into());
-        let (title, author) = split_ebook_name(&file_name);
-        let saved = match store::save_book(conn, draft_for(&title, &author), paths, None) {
+        let draft = reader_draft(&source, &device_root, &calibre);
+        let title = draft.title.clone();
+        let saved = match store::save_book(conn, draft, paths, None) {
             Ok(saved) => saved,
             Err(error) => {
                 report.notes.push(TransferNote { code: "failed".into(), name: title, detail: error });
@@ -267,6 +270,30 @@ pub fn import_books(conn: &Connection, paths: &StorePaths, root: &Path, relative
     }
     progress(total, total, "");
     Ok(report)
+}
+
+/// Dane książki z czytnika: najpierw indeks Calibre, potem metadane wewnątrz EPUB-a, na końcu nazwa pliku.
+fn reader_draft(source: &Path, device_root: &Path, calibre: &std::collections::HashMap<String, crate::infrastructure::importer::ImportRow>) -> BookDraft {
+    let lpath = source.strip_prefix(device_root).ok().map(|rel| ebook_meta::lpath_key(&rel.to_string_lossy()));
+    let row = lpath.and_then(|key| calibre.get(&key).cloned()).or_else(|| ebook_meta::from_epub(source));
+    if let Some(row) = row {
+        let mut draft = crate::infrastructure::importer::draft_from_row(&row, "reader");
+        if row.authors.is_empty() {
+            let (_, author) = guess_name(source);
+            draft.authors = vec![author];
+        }
+        return draft;
+    }
+    let (title, author) = guess_name(source);
+    let mut draft = draft_for(&title, &author);
+    draft.metadata_source = Some("reader".into());
+    draft
+}
+
+fn guess_name(source: &Path) -> (String, String) {
+    let file_name = source.file_name().map(|name| name.to_string_lossy().to_string()).unwrap_or_else(|| "ksiazka".into());
+    let parent = source.parent().and_then(|dir| dir.file_name()).map(|name| name.to_string_lossy().to_string());
+    split_ebook_name_in(&file_name, parent.as_deref())
 }
 
 fn draft_for(title: &str, author: &str) -> BookDraft {
@@ -297,7 +324,15 @@ fn draft_for(title: &str, author: &str) -> BookDraft {
     }
 }
 
+#[cfg(test)]
 pub fn split_ebook_name(file_name: &str) -> (String, String) {
+    split_ebook_name_in(file_name, None)
+}
+
+/// Dzieli „A - B” na tytuł i autora. Calibre zapisuje na czytnikach „Tytuł - Autor”, a ręcznie nazwane
+/// pliki to często „Nazwisko, Imię - Tytuł”. O kolejności decydują kolejno: przecinek w nazwisku,
+/// folder autora, w którym leży plik, i dopiero domyślny układ Calibre.
+pub fn split_ebook_name_in(file_name: &str, parent: Option<&str>) -> (String, String) {
     let mut stem = file_name.trim();
     let lower = stem.to_lowercase();
     for suffix in [".kepub.epub", ".fb2.zip", ".azw3", ".azw4", ".epub", ".mobi", ".pdf", ".azw", ".kfx", ".djvu", ".docx", ".html", ".txt", ".doc", ".fb2", ".cbz", ".cbr", ".rtf", ".prc", ".htm"] {
@@ -307,15 +342,43 @@ pub fn split_ebook_name(file_name: &str) -> (String, String) {
         }
     }
     let stem = stem.trim().trim_matches(|ch: char| ch == '.' || ch == ' ');
-    if let Some((author, title)) = stem.split_once(" - ") {
-        let author = author.trim();
-        let title = title.trim();
-        if !author.is_empty() && !title.is_empty() {
-            return (title.to_string(), author.to_string());
+    if let Some((left, right)) = stem.split_once(" - ") {
+        let left = left.trim();
+        let right = right.trim();
+        if !left.is_empty() && !right.is_empty() {
+            let author_first = if looks_like_sorted_name(left) != looks_like_sorted_name(right) {
+                looks_like_sorted_name(left)
+            } else if let Some(folder) = parent.map(|p| same_person_key(p)).filter(|p| !p.is_empty()) {
+                if same_person_key(left) == folder {
+                    true
+                } else if same_person_key(right) == folder {
+                    false
+                } else {
+                    false
+                }
+            } else {
+                false
+            };
+            return if author_first { (right.to_string(), left.to_string()) } else { (left.to_string(), right.to_string()) };
         }
     }
     let title = if stem.is_empty() { "Bez tytułu".into() } else { stem.to_string() };
     (title, UNKNOWN_AUTHOR.into())
+}
+
+/// „Mickiewicz, Adam” – jedno słowo, przecinek, imię.
+fn looks_like_sorted_name(text: &str) -> bool {
+    match text.split_once(',') {
+        Some((last, first)) => !last.trim().contains(' ') && !last.trim().is_empty() && (1..=2).contains(&first.split_whitespace().count()),
+        None => false,
+    }
+}
+
+/// Klucz osoby niezależny od kolejności słów: „Mróz, Remigiusz” i „Remigiusz Mróz” dają to samo.
+fn same_person_key(text: &str) -> String {
+    let mut words: Vec<String> = crate::domain::fold(text).split_whitespace().map(str::to_string).collect();
+    words.sort();
+    words.join(" ")
 }
 
 fn destination_name(author: &str, title: &str, format: &str) -> String {
@@ -657,6 +720,13 @@ mod tests {
         let other = dir.as_path().join("other");
         touch_dir(&other.join("system"));
         assert!(match_root(&other).is_none());
+    }
+
+    #[test]
+    fn guesses_which_side_is_the_author() {
+        assert_eq!(split_ebook_name_in("AI dla Laika - Marek Zettel.epub", None), ("AI dla Laika".into(), "Marek Zettel".into()));
+        assert_eq!(split_ebook_name_in("Mroz, Remigiusz - Kasacja.epub", None), ("Kasacja".into(), "Mroz, Remigiusz".into()));
+        assert_eq!(split_ebook_name_in("Remigiusz Mroz - Kasacja.epub", Some("Mroz, Remigiusz")), ("Kasacja".into(), "Remigiusz Mroz".into()));
     }
 
     #[test]

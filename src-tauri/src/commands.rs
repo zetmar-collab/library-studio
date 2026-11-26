@@ -460,7 +460,9 @@ pub async fn verify_files(app: AppHandle) -> Res<Vec<FileRow>> {
     .await
 }
 
-const OPENABLE: &[&str] = &["epub", "pdf", "mobi", "azw", "azw3", "azw4", "kfx", "fb2", "djvu", "cbz", "cbr", "txt", "rtf", "doc", "docx", "html", "htm", "prc", "zip"];
+/// Tylko formaty czytane biernie. Pliki mogą przyjść z synchronizacji, więc HTML, DOC(X), RTF i ZIP,
+/// które mogą uruchamiać skrypty, makra albo inne programy, nie są otwierane jednym kliknięciem.
+const OPENABLE: &[&str] = &["epub", "pdf", "mobi", "azw", "azw3", "azw4", "kfx", "fb2", "djvu", "cbz", "cbr", "txt", "prc"];
 
 #[tauri::command]
 pub async fn open_file(app: AppHandle, id: String) -> Res<()> {
@@ -653,6 +655,24 @@ pub async fn empty_trash(app: AppHandle) -> Res<u32> {
         let _guard = JobGuard::start(state)?;
         let paths = paths(state)?;
         state.db.with(|conn| catalog::empty_trash(conn, &paths))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn file_repairs(app: AppHandle) -> Res<Vec<catalog::FileRepair>> {
+    run(app, |_, state| {
+        let paths = paths(state)?;
+        state.db.with(|conn| catalog::file_repairs(conn, &paths))
+    })
+    .await
+}
+
+#[tauri::command]
+pub async fn apply_file_repairs(app: AppHandle, ids: Vec<String>) -> Res<u32> {
+    run(app, move |_, state| {
+        let paths = paths(state)?;
+        state.db.with(|conn| catalog::apply_file_repairs(conn, &paths, &ids))
     })
     .await
 }

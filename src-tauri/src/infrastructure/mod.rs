@@ -1,6 +1,7 @@
 pub mod backup;
 pub mod bookstores;
 pub mod catalog;
+pub mod ebook_meta;
 pub mod importer;
 pub mod reader;
 pub mod db;

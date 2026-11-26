@@ -127,6 +127,8 @@ pub fn run() {
             commands::purge_book,
             commands::empty_trash,
             commands::find_duplicates,
+            commands::file_repairs,
+            commands::apply_file_repairs,
             commands::ignore_duplicates,
             commands::merge_books,
             commands::reading_stats,

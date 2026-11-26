@@ -677,3 +677,96 @@ mod tests {
         let _ = fs::remove_dir_all(dir);
     }
 }
+
+// ---------- Naprawa danych z plików ----------
+
+/// Książka z czytnika, której tytuł i autor w katalogu różnią się od metadanych zapisanych w pliku EPUB.
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FileRepair {
+    pub book_id: String,
+    pub old_title: String,
+    pub old_authors: Vec<String>,
+    pub new_title: String,
+    pub new_authors: Vec<String>,
+}
+
+fn repair_candidates(conn: &Connection) -> Result<Vec<String>, String> {
+    // Tylko książki zaimportowane z czytnika (wcześniej bez źródła) i bez ręcznie poprawionego tytułu lub autora.
+    let mut stmt = conn
+        .prepare(
+            "SELECT DISTINCT b.id FROM books b JOIN book_editions e ON e.book_id = b.id JOIN digital_copies d ON d.book_edition_id = e.id
+             WHERE b.deleted_at IS NULL AND (e.metadata_source IS NULL OR e.metadata_source = 'reader')
+               AND b.manually_edited_fields NOT LIKE '%\"title\"%' AND b.manually_edited_fields NOT LIKE '%\"authors\"%'",
+        )
+        .map_err(map_sql)?;
+    let ids = stmt.query_map([], |row| row.get::<_, String>(0)).map_err(map_sql)?;
+    ids.collect::<Result<Vec<_>, _>>().map_err(map_sql)
+}
+
+fn file_row(conn: &Connection, paths: &StorePaths, book_id: &str) -> Result<Option<crate::infrastructure::importer::ImportRow>, String> {
+    for file in store::catalog_files(conn, book_id, paths)? {
+        if let Some(row) = crate::infrastructure::ebook_meta::from_epub(&file.absolute) {
+            if !row.authors.is_empty() {
+                return Ok(Some(row));
+            }
+        }
+    }
+    Ok(None)
+}
+
+pub fn file_repairs(conn: &Connection, paths: &StorePaths) -> Result<Vec<FileRepair>, String> {
+    let mut out = Vec::new();
+    for id in repair_candidates(conn)? {
+        let Some(book) = load_book(conn, &id)? else { continue };
+        let Some(row) = file_row(conn, paths, &id)? else { continue };
+        let new_title = row.title.trim().to_string();
+        if fold(&new_title) == fold(&book.title) && dedupe_key(&new_title, &row.authors) == dedupe_key(&book.title, &book.authors) {
+            continue;
+        }
+        out.push(FileRepair { book_id: id, old_title: book.title, old_authors: book.authors, new_title, new_authors: row.authors });
+    }
+    out.sort_by(|a, b| a.new_title.to_lowercase().cmp(&b.new_title.to_lowercase()));
+    Ok(out)
+}
+
+/// Zastępuje tytuł i autora danymi z pliku i uzupełnia puste pola. Zwraca liczbę poprawionych książek.
+pub fn apply_file_repairs(conn: &Connection, paths: &StorePaths, ids: &[String]) -> Result<u32, String> {
+    let allowed: HashSet<String> = repair_candidates(conn)?.into_iter().collect();
+    let mut fixed = 0;
+    for id in ids.iter().filter(|id| allowed.contains(*id)) {
+        let Some(row) = file_row(conn, paths, id)? else { continue };
+        let title = row.title.trim().to_string();
+        let key = dedupe_key(&title, &row.authors);
+        // Ten sam tytuł i autor przy innej książce: to duplikat, zostawiamy go narzędziu „Duplikaty”.
+        if find_book_by_key(conn, &key)?.is_some_and(|other| &other != id) {
+            continue;
+        }
+        let stamp = now();
+        conn.execute(
+            "UPDATE books SET title=?1, authors=?2, dedupe_key=?3,
+                publisher=COALESCE(NULLIF(publisher, ''), ?4), publication_year=COALESCE(publication_year, ?5),
+                language=COALESCE(NULLIF(language, ''), ?6), description=COALESCE(NULLIF(description, ''), ?7),
+                series_name=COALESCE(NULLIF(series_name, ''), ?8), series_number=COALESCE(NULLIF(series_number, ''), ?9),
+                updated_at=?10 WHERE id=?11",
+            params![
+                title, serde_json::to_string(&row.authors).unwrap(), key, row.publisher, row.year, row.language,
+                row.description, row.series_name, row.series_number, stamp, id
+            ],
+        )
+        .map_err(map_sql)?;
+        let edition = store::first_edition(conn, id)?;
+        for isbn in [row.isbn13.as_deref(), row.isbn10.as_deref()].into_iter().flatten() {
+            if find_book_by_isbn(conn, isbn)?.is_none() {
+                let column = if isbn.len() == 13 { "isbn13" } else { "isbn10" };
+                conn.execute(&format!("UPDATE book_editions SET {column}=COALESCE({column}, ?1), updated_at=?2 WHERE id=?3"), params![isbn, stamp, edition]).map_err(map_sql)?;
+            }
+        }
+        conn.execute("UPDATE book_editions SET metadata_source='reader', updated_at=?1 WHERE id=?2", params![stamp, edition]).map_err(map_sql)?;
+        rebuild_search(conn, id)?;
+        let _ = write_metadata_file(conn, paths, id);
+        fixed += 1;
+    }
+    Ok(fixed)
+}
+

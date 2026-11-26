@@ -284,6 +284,8 @@ export type DuplicateBook = {
   copies: number;
 };
 
+export type FileRepair = { bookId: string; oldTitle: string; oldAuthors: string[]; newTitle: string; newAuthors: string[] };
+
 export type DuplicateGroup = { reason: "isbn" | "title"; books: DuplicateBook[] };
 
 export type Count = { name: string; count: number };

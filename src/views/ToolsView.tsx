@@ -3,15 +3,16 @@ import { api } from "../api";
 import { ean13Modules } from "../barcode";
 import { useI18n } from "../i18n";
 import { useUi } from "../ui";
-import { errorText, type DuplicateGroup, type ExportRow, type ImportRow, type JobProgress, type TrashRow } from "../types";
+import { errorText, type DuplicateGroup, type ExportRow, type FileRepair, type ImportRow, type JobProgress, type TrashRow } from "../types";
 
-type Tab = "trash" | "duplicates" | "import" | "print";
+type Tab = "trash" | "repair" | "duplicates" | "import" | "print";
 
 export function ToolsView({ progress, onChanged, onOpen }: { progress: JobProgress | null; onChanged: () => void; onOpen: (id: string) => void }) {
   const { t } = useI18n();
   const [tab, setTab] = useState<Tab>("trash");
   const tabs: [Tab, string][] = [
     ["trash", t("trashTitle")],
+    ["repair", t("repairTitle")],
     ["duplicates", t("duplicatesTitle")],
     ["import", t("importTitle")],
     ["print", t("printTitle")],
@@ -28,6 +29,7 @@ export function ToolsView({ progress, onChanged, onOpen }: { progress: JobProgre
       </div>
       <div className="mt-8 print:mt-0">
         {tab === "trash" ? <TrashTab onChanged={onChanged} /> : null}
+        {tab === "repair" ? <RepairTab onChanged={onChanged} /> : null}
         {tab === "duplicates" ? <DuplicatesTab onChanged={onChanged} onOpen={onOpen} /> : null}
         {tab === "import" ? <ImportTab progress={progress} onChanged={onChanged} /> : null}
         {tab === "print" ? <PrintTab /> : null}
@@ -91,6 +93,63 @@ function TrashTab({ onChanged }: { onChanged: () => void }) {
       </ul>
       {rows.length === 0 ? <p className="mt-4 text-muted">{t("trashEmpty")}</p> : null}
       {message ? <p className="mt-4 text-stamp" role="alert">{message}</p> : null}
+    </div>
+  );
+}
+
+function RepairTab({ onChanged }: { onChanged: () => void }) {
+  const { t } = useI18n();
+  const { notify } = useUi();
+  const [rows, setRows] = useState<FileRepair[] | null>(null);
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  const load = useCallback(() => {
+    setRows(null);
+    api.fileRepairs().then((next) => { setRows(next); setPicked(next.map((row) => row.bookId)); }).catch((cause) => setMessage(errorText(cause)));
+  }, []);
+  useEffect(load, [load]);
+
+  async function apply() {
+    setBusy(true);
+    try {
+      const fixed = await api.applyFileRepairs(picked);
+      notify(t("repairDone").replace("{count}", String(fixed)));
+      load();
+      onChanged();
+    } catch (cause) {
+      setMessage(errorText(cause));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!rows) return <p>{message ?? t("loading")}</p>;
+  return (
+    <div>
+      <p className="max-w-[60ch] text-muted">{t("repairLead")}</p>
+      {message ? <p className="mt-3 text-stamp" role="status">{message}</p> : null}
+      {rows.length === 0 ? <p className="mt-4">{t("repairNone")}</p> : (
+        <>
+          <button type="button" disabled={busy || picked.length === 0} onClick={() => void apply()} className="mt-4 bg-binding px-4 py-2 text-sheet disabled:opacity-50">
+            {t("repairApply")} ({picked.length})
+          </button>
+          <ul className="mt-4">
+            {rows.map((row) => (
+              <li key={row.bookId} className="border-b border-rule py-3 dark:border-night-rule">
+                <label className="flex items-start gap-3">
+                  <input type="checkbox" className="mt-1" checked={picked.includes(row.bookId)} onChange={() => setPicked((current) => current.includes(row.bookId) ? current.filter((id) => id !== row.bookId) : [...current, row.bookId])} />
+                  <span>
+                    <span className="block text-muted line-through">{row.oldTitle} · {row.oldAuthors.join(", ")}</span>
+                    <span className="block font-display text-xl">{row.newTitle} · {row.newAuthors.join(", ")}</span>
+                  </span>
+                </label>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }
